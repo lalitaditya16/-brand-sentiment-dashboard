@@ -174,7 +174,7 @@ with st.sidebar:
     num_tweets = st.slider(
         "Number of Tweets",
         min_value=20,
-        max_value=200,
+        max_value=1000,
         value=100,
         step=20,
         help="More tweets = better analysis"
