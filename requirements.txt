@@ -1,8 +1,8 @@
 streamlit
-snscrape
 textblob
 vaderSentiment
 pandas
 plotly
 wordcloud
 matplotlib
+requests
