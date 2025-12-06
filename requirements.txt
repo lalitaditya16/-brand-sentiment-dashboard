@@ -1,5 +1,5 @@
 streamlit
-ntscraper==0.4.0
+snscrape
 textblob
 vaderSentiment
 pandas

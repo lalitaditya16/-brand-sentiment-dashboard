@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from ntscraper import Nitter
+import snscrape.modules.twitter as sntwitter
 import re
 from textblob import TextBlob
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
@@ -14,18 +14,13 @@ import matplotlib.pyplot as plt
 # Page config
 st.set_page_config(
     page_title="Brand Sentiment Dashboard",
-    page_icon="📊",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # Initialize sentiment analyzer
 vader = SentimentIntensityAnalyzer()
-
-# Initialize scraper
-@st.cache_resource
-def get_scraper():
-    return Nitter()
 
 def clean_text(text):
     """Clean tweet text"""
@@ -39,6 +34,9 @@ def analyze_sentiment(text):
     """Analyze sentiment using TextBlob and VADER"""
     cleaned = clean_text(text)
     
+    if not cleaned:
+        return 0, "Neutral", ""
+    
     # TextBlob
     blob = TextBlob(cleaned)
     polarity = blob.sentiment.polarity
@@ -46,19 +44,19 @@ def analyze_sentiment(text):
     # VADER (better for social media)
     vader_score = vader.polarity_scores(cleaned)['compound']
     
-    # Average both
-    avg_score = (polarity + vader_score) / 2
+    # Weighted average (VADER is better for social media)
+    avg_score = (polarity * 0.3) + (vader_score * 0.7)
     
     # Label
     if avg_score > 0.05:
         label = "Positive"
-        color = "🟢"
+        color = ""
     elif avg_score < -0.05:
         label = "Negative"
-        color = "🔴"
+        color = ""
     else:
         label = "Neutral"
-        color = "🟡"
+        color = ""
     
     return avg_score, label, color
 
@@ -75,33 +73,36 @@ def extract_hashtags(tweets):
     return []
 
 def scrape_tweets(query, num_tweets=100):
-    """Scrape tweets using ntscraper"""
-    scraper = get_scraper()
+    """Scrape tweets using snscrape"""
+    tweets = []
     
     try:
-        tweets = scraper.get_tweets(query, mode='term', number=num_tweets)
-        
-        if not tweets or 'tweets' not in tweets:
-            return None
-        
-        tweet_list = tweets['tweets']
-        
-        if not tweet_list:
-            return None
+        # Use snscrape to get tweets
+        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(query).get_items()):
+            if i >= num_tweets:
+                break
             
-        return tweet_list
+            tweets.append({
+                'text': tweet.rawContent,
+                'date': tweet.date,
+                'likes': tweet.likeCount or 0,
+                'retweets': tweet.retweetCount or 0,
+                'username': tweet.user.username
+            })
+        
+        return tweets if tweets else None
         
     except Exception as e:
         st.error(f"Error scraping tweets: {str(e)}")
         return None
 
 # Streamlit UI
-st.title("📊 Brand Sentiment Dashboard")
+st.title(" Brand Sentiment Dashboard")
 st.markdown("**Analyze public opinion about any brand, product, or topic from Twitter/X**")
 
 # Sidebar
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header(" Settings")
     
     query = st.text_input(
         "Enter Brand/Product Name",
@@ -118,10 +119,10 @@ with st.sidebar:
         help="More tweets = better analysis but slower"
     )
     
-    analyze_button = st.button("🔍 Analyze", type="primary", use_container_width=True)
+    analyze_button = st.button(" Analyze", type="primary", use_container_width=True)
     
     st.markdown("---")
-    st.markdown("### 📖 How it works")
+    st.markdown("###  How it works")
     st.markdown("""
     1. Enter a brand/product name
     2. Click Analyze
@@ -154,8 +155,9 @@ if analyze_button and query:
                     'sentiment': label,
                     'color': color,
                     'date': tweet.get('date', 'Unknown'),
-                    'likes': tweet.get('stats', {}).get('likes', 0),
-                    'retweets': tweet.get('stats', {}).get('retweets', 0)
+                    'likes': tweet.get('likes', 0),
+                    'retweets': tweet.get('retweets', 0),
+                    'username': tweet.get('username', 'Unknown')
                 })
         
         if not results:
@@ -174,19 +176,19 @@ if analyze_button and query:
         # Determine overall sentiment
         if avg_sentiment > 0.05:
             overall = "Positive"
-            overall_color = "🟢"
-            sentiment_emoji = "😊"
+            overall_color = ""
+            sentiment_emoji = ""
         elif avg_sentiment < -0.05:
             overall = "Negative"
-            overall_color = "🔴"
-            sentiment_emoji = "😞"
+            overall_color = ""
+            sentiment_emoji = ""
         else:
             overall = "Neutral"
-            overall_color = "🟡"
-            sentiment_emoji = "😐"
+            overall_color = ""
+            sentiment_emoji = ""
         
         # Header with results
-        st.success(f"✅ Analyzed {total_tweets} tweets about **{query}**")
+        st.success(f" Analyzed {total_tweets} tweets about **{query}**")
         
         # Key metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -225,7 +227,7 @@ if analyze_button and query:
         col_left, col_right = st.columns(2)
         
         with col_left:
-            st.subheader("📊 Sentiment Distribution")
+            st.subheader(" Sentiment Distribution")
             
             # Pie chart
             fig_pie = go.Figure(data=[go.Pie(
@@ -245,7 +247,7 @@ if analyze_button and query:
             st.plotly_chart(fig_pie, use_container_width=True)
         
         with col_right:
-            st.subheader("📈 Sentiment Score Distribution")
+            st.subheader(" Sentiment Score Distribution")
             
             # Histogram
             fig_hist = px.histogram(
@@ -272,7 +274,7 @@ if analyze_button and query:
         
         # Trending hashtags
         st.markdown("---")
-        st.subheader("🔥 Trending Topics & Hashtags")
+        st.subheader(" Trending Topics & Hashtags")
         
         hashtags = extract_hashtags(df['text'].tolist())
         
@@ -286,7 +288,7 @@ if analyze_button and query:
         
         # Word cloud
         st.markdown("---")
-        st.subheader("☁️ Word Cloud")
+        st.subheader(" Word Cloud")
         
         all_text = ' '.join(df['text'].apply(clean_text).tolist())
         
@@ -309,35 +311,35 @@ if analyze_button and query:
         
         # Sample tweets
         st.markdown("---")
-        st.subheader("💬 Sample Tweets")
+        st.subheader(" Sample Tweets")
         
         # Top positive
-        st.markdown("#### 🟢 Most Positive Tweets")
+        st.markdown("####  Most Positive Tweets")
         top_positive = df.nlargest(3, 'sentiment_score')
         for _, tweet in top_positive.iterrows():
             with st.container():
-                st.markdown(f"{tweet['color']} **Score: {tweet['sentiment_score']:.3f}**")
+                st.markdown(f"{tweet['color']} **Score: {tweet['sentiment_score']:.3f}**  @{tweet['username']}")
                 st.markdown(f"> {tweet['text'][:200]}...")
-                st.caption(f"❤️ {tweet['likes']} | 🔄 {tweet['retweets']}")
+                st.caption(f" {tweet['likes']} |  {tweet['retweets']}")
                 st.markdown("")
         
         # Top negative
-        st.markdown("#### 🔴 Most Negative Tweets")
+        st.markdown("####  Most Negative Tweets")
         top_negative = df.nsmallest(3, 'sentiment_score')
         for _, tweet in top_negative.iterrows():
             with st.container():
-                st.markdown(f"{tweet['color']} **Score: {tweet['sentiment_score']:.3f}**")
+                st.markdown(f"{tweet['color']} **Score: {tweet['sentiment_score']:.3f}**  @{tweet['username']}")
                 st.markdown(f"> {tweet['text'][:200]}...")
-                st.caption(f"❤️ {tweet['likes']} | 🔄 {tweet['retweets']}")
+                st.caption(f" {tweet['likes']} |  {tweet['retweets']}")
                 st.markdown("")
         
         # Download data
         st.markdown("---")
-        st.subheader("💾 Download Data")
+        st.subheader(" Download Data")
         
         csv = df.to_csv(index=False)
         st.download_button(
-            label="📥 Download CSV",
+            label=" Download CSV",
             data=csv,
             file_name=f"{query}_sentiment_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv"
@@ -345,9 +347,9 @@ if analyze_button and query:
 
 else:
     # Welcome screen
-    st.info("👈 Enter a brand or product name in the sidebar to get started!")
+    st.info(" Enter a brand or product name in the sidebar to get started!")
     
-    st.markdown("### 🎯 Example searches:")
+    st.markdown("###  Example searches:")
     
     col1, col2, col3 = st.columns(3)
     
@@ -380,7 +382,7 @@ else:
     
     st.markdown("---")
     st.markdown("""
-    ### 📊 What you'll get:
+    ###  What you'll get:
     - **Overall sentiment** (Positive/Neutral/Negative)
     - **Sentiment distribution** pie chart
     - **Score histogram** showing sentiment spread
@@ -392,4 +394,4 @@ else:
 
 # Footer
 st.markdown("---")
-st.caption("Built with Streamlit • Free Twitter scraping • No API keys needed")
+st.caption("Built with Streamlit  Free Twitter scraping  No API keys needed")
