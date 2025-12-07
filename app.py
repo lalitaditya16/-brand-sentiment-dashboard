@@ -100,28 +100,47 @@ def generate_tweets_with_groq(query, num_tweets=100):
         for i in range(batches):
             current_batch = min(batch_size, num_tweets - len(all_tweets))
             
-            prompt = f"""Generate {current_batch} realistic Twitter/X posts about "{query}". 
-Create diverse opinions with approximately:
-- 45% positive sentiment
-- 25% negative sentiment  
-- 30% neutral sentiment
+            prompt = f"""Generate {current_batch} realistic Twitter/X and Reddit-style posts about "{query}".
 
-Make them sound like real social media posts with:
-- Natural language, typos occasionally
-- Emojis where appropriate
-- Hashtags sometimes
-- Varying lengths (short to medium)
-- Mix of customer reviews, news reactions, questions, complaints, praise
+IMPORTANT: Create a BALANCED mix of sentiments:
+- 40% POSITIVE (praise, satisfaction, recommendations)
+- 35% NEGATIVE (complaints, disappointments, criticisms, issues)
+- 25% NEUTRAL (questions, observations, news reactions)
 
-Return ONLY a JSON array with this exact structure:
+Study real Reddit and Twitter discussions about brands. Include:
+
+POSITIVE examples:
+- "Just got my {query} and wow, the quality is insane! Best decision ever 🔥"
+- "Been using {query} for 6 months, zero issues. Highly recommend #quality"
+- "{query} customer service actually helped me in 10 mins. Rare these days 👏"
+
+NEGATIVE examples (BE CRITICAL):
+- "My {query} broke after 3 weeks. Customer support ghosted me. Avoid! 😡 #disappointed"
+- "Overpriced garbage. {query} used to be good but quality tanked recently 👎"
+- "Still waiting 2 weeks for {query} support to respond. Absolutely terrible service"
+- "Don't waste money on {query}. Cheap knockoffs work better tbh"
+
+NEUTRAL examples:
+- "Thinking about getting {query}. Anyone have real experience with it?"
+- "Saw {query} announced new features. Might be worth checking out"
+- "{query} is trending. What's everyone's take on this?"
+
+Style requirements:
+- Write like REAL people (informal, casual, sometimes frustrated)
+- Include typos occasionally ("tho", "gonna", "u", "rn")
+- Use Reddit-style formatting occasionally
+- Vary length (some short rants, some detailed reviews)
+- Add emojis naturally (😤 😍 🤔 💯 👎 🔥)
+- Include realistic hashtags (#scam #loveit #meh)
+- Mix complaints about: price, quality, customer service, features, reliability
+
+Make negative tweets GENUINELY critical with specific complaints, not generic disappointment.
+
+Return ONLY a JSON array:
 [
   {{"text": "tweet content here"}},
   {{"text": "another tweet here"}}
-]
-
-No other text, just the JSON array."""
-
-            response = client.chat.completions.create(
+]"""            response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.9,
