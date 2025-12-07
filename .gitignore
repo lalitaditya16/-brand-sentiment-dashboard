@@ -54,3 +54,6 @@ Thumbs.db
 *.csv
 *.json
 data/
+
+# Streamlit secrets
+.streamlit/secrets.toml

@@ -1,17 +1,15 @@
 ﻿import streamlit as st
 import pandas as pd
+import snscrape.modules.twitter as sntwitter
 import re
 from textblob import TextBlob
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import Counter
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-import random
-from groq import Groq
-import json
 
 # Page config
 st.set_page_config(
@@ -26,9 +24,9 @@ vader = SentimentIntensityAnalyzer()
 
 def clean_text(text):
     """Clean tweet text"""
-    text = re.sub(r"http\S+|www\S+|https\S+", "", text, flags=re.MULTILINE)
-    text = re.sub(r"\@\w+", "", text)
-    text = re.sub(r"RT[\s]+", "", text)
+    text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\@\w+', '', text)
+    text = re.sub(r'RT[\s]+', '', text)
     text = text.strip()
     return text
 
@@ -44,7 +42,7 @@ def analyze_sentiment(text):
     polarity = blob.sentiment.polarity
     
     # VADER (better for social media)
-    vader_score = vader.polarity_scores(cleaned)["compound"]
+    vader_score = vader.polarity_scores(cleaned)['compound']
     
     # Weighted average (VADER is better for social media)
     avg_score = (polarity * 0.3) + (vader_score * 0.7)
@@ -66,7 +64,7 @@ def extract_hashtags(tweets):
     """Extract trending hashtags"""
     hashtags = []
     for tweet in tweets:
-        found = re.findall(r"#(\w+)", tweet)
+        found = re.findall(r'#(\w+)', tweet)
         hashtags.extend(found)
     
     if hashtags:
@@ -74,93 +72,33 @@ def extract_hashtags(tweets):
         return [f"#{tag}" for tag, _ in common]
     return []
 
-@st.cache_data(ttl=3600)
-def generate_tweets_with_groq(query, num_tweets=100):
-    """Generate realistic tweets using Groq LLM"""
-    
-    # Get API key from Streamlit secrets
-    try:
-        groq_api_key = st.secrets["GROQ_API_KEY"]
-    except:
-        st.error("⚠️ GROQ_API_KEY not found in secrets. Please add it in Streamlit Cloud settings.")
-        return None
+def scrape_tweets(query, num_tweets=100):
+    """Scrape tweets using snscrape"""
+    tweets = []
     
     try:
-        client = Groq(api_key=groq_api_key)
-        
-        # Generate tweets in batches for better performance
-        batch_size = 50
-        all_tweets = []
-        usernames = ["tech_enthusiast", "daily_user", "honest_reviewer", "product_fan", "concerned_customer",
-                     "market_watcher", "industry_expert", "random_user", "verified_buyer", "social_observer",
-                     "techreviewer", "gadget_lover", "customer123", "real_user", "brand_watcher"]
-        
-        batches = (num_tweets + batch_size - 1) // batch_size
-        
-        for i in range(batches):
-            current_batch = min(batch_size, num_tweets - len(all_tweets))
+        # Use snscrape to get tweets
+        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(query).get_items()):
+            if i >= num_tweets:
+                break
             
-            prompt = f"""Generate {current_batch} realistic Twitter/X posts about "{query}". 
-Create diverse opinions with approximately:
-- 45% positive sentiment
-- 25% negative sentiment  
-- 30% neutral sentiment
-
-Make them sound like real social media posts with:
-- Natural language, typos occasionally
-- Emojis where appropriate
-- Hashtags sometimes
-- Varying lengths (short to medium)
-- Mix of customer reviews, news reactions, questions, complaints, praise
-
-Return ONLY a JSON array with this exact structure:
-[
-  {{"text": "tweet content here"}},
-  {{"text": "another tweet here"}}
-]
-
-No other text, just the JSON array."""
-
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.9,
-                max_tokens=2000
-            )
-            
-            content = response.choices[0].message.content.strip()
-            
-            # Parse JSON response
-            try:
-                tweets_data = json.loads(content)
-                
-                for tweet_obj in tweets_data:
-                    all_tweets.append({
-                        "text": tweet_obj["text"],
-                        "date": datetime.now() - timedelta(hours=random.randint(1, 168)),
-                        "likes": random.randint(1, 1000),
-                        "retweets": random.randint(0, 500),
-                        "username": random.choice(usernames)
-                    })
-                    
-                    if len(all_tweets) >= num_tweets:
-                        break
-                        
-            except json.JSONDecodeError:
-                st.warning(f"Batch {i+1} failed to parse. Using fallback data.")
-                continue
+            tweets.append({
+                'text': tweet.rawContent,
+                'date': tweet.date,
+                'likes': tweet.likeCount or 0,
+                'retweets': tweet.retweetCount or 0,
+                'username': tweet.user.username
+            })
         
-        random.shuffle(all_tweets)
-        return all_tweets[:num_tweets]
+        return tweets if tweets else None
         
     except Exception as e:
-        st.error(f"Error generating tweets with Groq: {str(e)}")
-        return None# Streamlit UI
-st.title(" Brand Sentiment Dashboard")
-st.markdown("**Analyze public opinion about any brand, product, or topic**")
+        st.error(f"Error scraping tweets: {str(e)}")
+        return None
 
-# AI-powered notice
-st.info("🤖 **AI-Powered**: This app uses Groq AI (Llama 3.3 70B) to generate realistic tweets for sentiment analysis.")
+# Streamlit UI
+st.title(" Brand Sentiment Dashboard")
+st.markdown("**Analyze public opinion about any brand, product, or topic from Twitter/X**")
 
 # Sidebar
 with st.sidebar:
@@ -175,10 +113,10 @@ with st.sidebar:
     num_tweets = st.slider(
         "Number of Tweets",
         min_value=20,
-        max_value=1000,
+        max_value=200,
         value=100,
         step=20,
-        help="More tweets = better analysis"
+        help="More tweets = better analysis but slower"
     )
     
     analyze_button = st.button(" Analyze", type="primary", use_container_width=True)
@@ -190,62 +128,67 @@ with st.sidebar:
     2. Click Analyze
     3. View sentiment analysis
     4. See trending topics
+    
+    **No API keys needed!**
     """)
 
 # Main content
 if analyze_button and query:
-    with st.spinner(f"Analyzing sentiment for {query}..."):
+    with st.spinner(f"Analyzing sentiment for '{query}'..."):
         
-        # Generate tweets using Groq AI
-        tweets = generate_tweets_with_groq(query, num_tweets)
+        # Scrape tweets
+        tweets = scrape_tweets(query, num_tweets)
         
         if not tweets:
-            st.error(f"No data available for {query}. Try a different search term.")
+            st.error(f"No tweets found for '{query}'. Try a different search term.")
             st.stop()
         
         # Analyze each tweet
         results = []
         for tweet in tweets:
-            text = tweet.get("text", "")
+            text = tweet.get('text', '')
             if text:
                 score, label, color = analyze_sentiment(text)
                 results.append({
-                    "text": text,
-                    "sentiment_score": score,
-                    "sentiment": label,
-                    "color": color,
-                    "date": tweet.get("date", "Unknown"),
-                    "likes": tweet.get("likes", 0),
-                    "retweets": tweet.get("retweets", 0),
-                    "username": tweet.get("username", "Unknown")
+                    'text': text,
+                    'sentiment_score': score,
+                    'sentiment': label,
+                    'color': color,
+                    'date': tweet.get('date', 'Unknown'),
+                    'likes': tweet.get('likes', 0),
+                    'retweets': tweet.get('retweets', 0),
+                    'username': tweet.get('username', 'Unknown')
                 })
         
         if not results:
-            st.error("Could not analyze data. Please try again.")
+            st.error("Could not analyze tweets. Please try again.")
             st.stop()
         
         df = pd.DataFrame(results)
         
         # Calculate metrics
         total_tweets = len(df)
-        avg_sentiment = df["sentiment_score"].mean()
-        positive_pct = (df["sentiment"] == "Positive").sum() / total_tweets * 100
-        neutral_pct = (df["sentiment"] == "Neutral").sum() / total_tweets * 100
-        negative_pct = (df["sentiment"] == "Negative").sum() / total_tweets * 100
+        avg_sentiment = df['sentiment_score'].mean()
+        positive_pct = (df['sentiment'] == 'Positive').sum() / total_tweets * 100
+        neutral_pct = (df['sentiment'] == 'Neutral').sum() / total_tweets * 100
+        negative_pct = (df['sentiment'] == 'Negative').sum() / total_tweets * 100
         
         # Determine overall sentiment
         if avg_sentiment > 0.05:
             overall = "Positive"
             overall_color = ""
+            sentiment_emoji = ""
         elif avg_sentiment < -0.05:
             overall = "Negative"
             overall_color = ""
+            sentiment_emoji = ""
         else:
             overall = "Neutral"
             overall_color = ""
+            sentiment_emoji = ""
         
         # Header with results
-        st.success(f" Analyzed {total_tweets} posts about **{query}**")
+        st.success(f" Analyzed {total_tweets} tweets about **{query}**")
         
         # Key metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -261,21 +204,21 @@ if analyze_button and query:
             st.metric(
                 "Positive",
                 f"{positive_pct:.1f}%",
-                f"{int(positive_pct * total_tweets / 100)} posts"
+                f"{int(positive_pct * total_tweets / 100)} tweets"
             )
         
         with col3:
             st.metric(
                 "Neutral",
                 f"{neutral_pct:.1f}%",
-                f"{int(neutral_pct * total_tweets / 100)} posts"
+                f"{int(neutral_pct * total_tweets / 100)} tweets"
             )
         
         with col4:
             st.metric(
                 "Negative",
                 f"{negative_pct:.1f}%",
-                f"{int(negative_pct * total_tweets / 100)} posts"
+                f"{int(negative_pct * total_tweets / 100)} tweets"
             )
         
         # Charts
@@ -288,11 +231,11 @@ if analyze_button and query:
             
             # Pie chart
             fig_pie = go.Figure(data=[go.Pie(
-                labels=["Positive", "Neutral", "Negative"],
+                labels=['Positive', 'Neutral', 'Negative'],
                 values=[positive_pct, neutral_pct, negative_pct],
-                marker=dict(colors=["#22c55e", "#eab308", "#ef4444"]),
+                marker=dict(colors=['#22c55e', '#eab308', '#ef4444']),
                 hole=0.4,
-                textinfo="label+percent"
+                textinfo='label+percent'
             )])
             
             fig_pie.update_layout(
@@ -309,15 +252,15 @@ if analyze_button and query:
             # Histogram
             fig_hist = px.histogram(
                 df,
-                x="sentiment_score",
+                x='sentiment_score',
                 nbins=30,
-                color="sentiment",
+                color='sentiment',
                 color_discrete_map={
-                    "Positive": "#22c55e",
-                    "Neutral": "#eab308",
-                    "Negative": "#ef4444"
+                    'Positive': '#22c55e',
+                    'Neutral': '#eab308',
+                    'Negative': '#ef4444'
                 },
-                labels={"sentiment_score": "Sentiment Score", "count": "Number of Posts"}
+                labels={'sentiment_score': 'Sentiment Score', 'count': 'Number of Tweets'}
             )
             
             fig_hist.update_layout(
@@ -333,7 +276,7 @@ if analyze_button and query:
         st.markdown("---")
         st.subheader(" Trending Topics & Hashtags")
         
-        hashtags = extract_hashtags(df["text"].tolist())
+        hashtags = extract_hashtags(df['text'].tolist())
         
         if hashtags:
             cols = st.columns(5)
@@ -341,53 +284,53 @@ if analyze_button and query:
                 with cols[i % 5]:
                     st.info(tag)
         else:
-            st.info("No hashtags found in posts")
+            st.info("No hashtags found in tweets")
         
         # Word cloud
         st.markdown("---")
         st.subheader(" Word Cloud")
         
-        all_text = " ".join(df["text"].apply(clean_text).tolist())
+        all_text = ' '.join(df['text'].apply(clean_text).tolist())
         
         if all_text.strip():
             try:
                 wordcloud = WordCloud(
                     width=1200,
                     height=400,
-                    background_color="white",
-                    colormap="viridis",
+                    background_color='white',
+                    colormap='viridis',
                     max_words=100
                 ).generate(all_text)
                 
                 fig_wc, ax = plt.subplots(figsize=(15, 5))
-                ax.imshow(wordcloud, interpolation="bilinear")
-                ax.axis("off")
+                ax.imshow(wordcloud, interpolation='bilinear')
+                ax.axis('off')
                 st.pyplot(fig_wc)
             except:
                 st.info("Not enough text data for word cloud")
         
-        # Sample posts
+        # Sample tweets
         st.markdown("---")
-        st.subheader(" Sample Posts")
+        st.subheader(" Sample Tweets")
         
         # Top positive
-        st.markdown("####  Most Positive Posts")
-        top_positive = df.nlargest(3, "sentiment_score")
-        for _, post in top_positive.iterrows():
+        st.markdown("####  Most Positive Tweets")
+        top_positive = df.nlargest(3, 'sentiment_score')
+        for _, tweet in top_positive.iterrows():
             with st.container():
-                st.markdown(f"{post['color']} **Score: {post['sentiment_score']:.3f}**  @{post['username']}")
-                st.markdown(f"> {post['text']}")
-                st.caption(f" {post['likes']} |  {post['retweets']}")
+                st.markdown(f"{tweet['color']} **Score: {tweet['sentiment_score']:.3f}**  @{tweet['username']}")
+                st.markdown(f"> {tweet['text'][:200]}...")
+                st.caption(f" {tweet['likes']} |  {tweet['retweets']}")
                 st.markdown("")
         
         # Top negative
-        st.markdown("####  Most Negative Posts")
-        top_negative = df.nsmallest(3, "sentiment_score")
-        for _, post in top_negative.iterrows():
+        st.markdown("####  Most Negative Tweets")
+        top_negative = df.nsmallest(3, 'sentiment_score')
+        for _, tweet in top_negative.iterrows():
             with st.container():
-                st.markdown(f"{post['color']} **Score: {post['sentiment_score']:.3f}**  @{post['username']}")
-                st.markdown(f"> {post['text']}")
-                st.caption(f" {post['likes']} |  {post['retweets']}")
+                st.markdown(f"{tweet['color']} **Score: {tweet['sentiment_score']:.3f}**  @{tweet['username']}")
+                st.markdown(f"> {tweet['text'][:200]}...")
+                st.caption(f" {tweet['likes']} |  {tweet['retweets']}")
                 st.markdown("")
         
         # Download data
@@ -439,22 +382,16 @@ else:
     
     st.markdown("---")
     st.markdown("""
-    ###  What you will get:
+    ###  What you'll get:
     - **Overall sentiment** (Positive/Neutral/Negative)
     - **Sentiment distribution** pie chart
     - **Score histogram** showing sentiment spread
     - **Trending hashtags** related to the brand
     - **Word cloud** of common terms
-    - **Sample posts** (most positive and negative)
+    - **Sample tweets** (most positive and negative)
     - **Downloadable CSV** with all data
-    
-    ###  Technical Implementation:
-    - **TextBlob** for linguistic sentiment analysis
-    - **VADER** for social media-optimized analysis
-    - **Weighted scoring** combining both algorithms
-    - **Interactive visualizations** with Plotly
     """)
 
 # Footer
 st.markdown("---")
-st.caption("Built with Streamlit  Demo Mode with Sample Data")
+st.caption("Built with Streamlit  Free Twitter scraping  No API keys needed")
