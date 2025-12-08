@@ -180,8 +180,7 @@ Return ONLY a JSON array:
 st.title(" Brand Sentiment Dashboard")
 st.markdown("**Analyze public opinion about any brand, product, or topic**")
 
-# AI-powered notice
-st.info("🤖 **AI-Powered**: This app uses Groq AI (Llama 3.3 70B) to generate realistic tweets for sentiment analysis.")
+
 
 # Sidebar
 with st.sidebar:
