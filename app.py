@@ -108,30 +108,9 @@ IMPORTANT: Create a BALANCED mix of sentiments:
 
 Study real Reddit and Twitter discussions about brands. Include:
 
-POSITIVE examples:
-- "Just got my {query} and wow, the quality is insane! Best decision ever"
-- "Been using {query} for 6 months, zero issues. Highly recommend #quality"
-- "{query} customer service actually helped me in 10 mins. Rare these days"
 
-NEGATIVE examples (BE CRITICAL):
-- "My {query} broke after 3 weeks. Customer support ghosted me. Avoid! #disappointed"
-- "Overpriced garbage. {query} used to be good but quality tanked recently"
-- "Still waiting 2 weeks for {query} support to respond. Absolutely terrible service"
-- "Don't waste money on {query}. Cheap knockoffs work better tbh"
 
-NEUTRAL examples:
-- "Thinking about getting {query}. Anyone have real experience with it?"
-- "Saw {query} announced new features. Might be worth checking out"
-- "{query} is trending. What's everyone's take on this?"
 
-Style requirements:
-- Write like REAL people (informal, casual, sometimes frustrated)
-- Include typos occasionally ("tho", "gonna", "u", "rn")
-- Use Reddit-style formatting occasionally
-- Vary length (some short rants, some detailed reviews)
-- Add emojis naturally when appropriate
-- Include realistic hashtags (#scam #loveit #meh)
-- Mix complaints about: price, quality, customer service, features, reliability
 
 Make negative tweets GENUINELY critical with specific complaints, not generic disappointment.
 
